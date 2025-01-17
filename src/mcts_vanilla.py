@@ -116,12 +116,12 @@ def ucb(node: MCTSNode, is_opponent: bool):
         The value of the UCB function for the given node
     """
     assert node, "Node is None in ucb"
-    assert node.vists > 0, "Node has not yet been visited in ucb"
+    assert node.visits > 0, "Node has not yet been visited in ucb"
     assert node.parent, "Node does not have a parent in ucb"
-    win_rate = (node.wins / node.vists)
+    win_rate = (node.wins / node.visits)
     if is_opponent:
         win_rate = 1 - win_rate
-    explore_value = explore_faction * sqrt(log(node.parent.vists) / node.vists)
+    explore_value = explore_faction * sqrt(log(node.parent.visits) / node.visits)
     return win_rate + explore_value
 
 def get_best_action(root_node: MCTSNode):
