@@ -152,6 +152,7 @@ def think(board: Board, current_state):
     Returns:    The action to be taken from the current state
 
     """
+
     bot_identity = board.current_player(current_state) # 1 or 2
     root_node = MCTSNode(parent=None, parent_action=None, action_list=board.legal_actions(current_state))
 
@@ -161,10 +162,16 @@ def think(board: Board, current_state):
 
         # Do MCTS - This is all you!
         # ...
+        node, state = traverse_nodes(node, board, state, bot_identity)
+        node, state = expand_leaf(node, board, state)
+        terminal_state = rollout(board, state)
+        player_won = is_win(board, terminal_state, bot_identity)
+        backpropagate(node, player_won)
 
     # Return an action, typically the most frequently used action (from the root) or the action with the best
     # estimated win rate.
     best_action = get_best_action(root_node)
     
     print(f"Action chosen: {best_action}")
+    # print(f"Action chosen: {best_action}")
     return best_action
