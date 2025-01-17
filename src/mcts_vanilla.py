@@ -23,7 +23,31 @@ def traverse_nodes(node: MCTSNode, board: Board, state, bot_identity: int):
         state: The state associated with that node
 
     """
-    pass
+
+    while True:
+        assert node, "Node is none in traverse_nodes"
+
+        #return node if untried actions exist
+        if node.untried_actions:
+            return node, state
+        
+        #return node if the game is over
+        if board.is_ended(state):
+            return node, state
+        
+        #otherwise, use UCB for the next node
+        best_child, best_value = None, -float('inf')
+        for action, child in node.child_nodes.items():
+            is_opponent = (bot_identity != board.current_player(state))
+            child_value = ucb(child, is_opponent)
+            if (child_value > best_value):
+                best_value = child_value
+                best_child = child
+
+        #update node and the state for the next loop
+        node = best_child
+        state = board.next_state(state, node.parent_action)
+    
 
 def expand_leaf(node: MCTSNode, board: Board, state):
     """ Adds a new leaf to the tree by creating a new child node for the given node (if it is non-terminal).
@@ -38,7 +62,17 @@ def expand_leaf(node: MCTSNode, board: Board, state):
         state: The state associated with that node
 
     """
-    pass
+    assert node, "Node is none in expand_leaf"
+
+    #if untried actions for the node exist
+    if node.untried_actions:
+        action = node.untried_actions.pop()
+        next_state = board.next_state(state, action)
+        child_node = MCTSNode(parent=node, parent_action=action, action_list=board.legal_actions(next_state))
+        node.child_nodes[action] = child_node
+        return child_node, next_state
+    else:
+        return node, state
 
 
 def rollout(board: Board, state):
@@ -52,7 +86,10 @@ def rollout(board: Board, state):
         state: The terminal game state
 
     """
-    pass
+    while board.points_values(state) is None:
+        action = choice(board.legal_actions(state))
+        state = board.next_state(state, action)
+    return state
 
 
 def backpropagate(node: MCTSNode|None, won: bool):
@@ -63,7 +100,11 @@ def backpropagate(node: MCTSNode|None, won: bool):
         won:    An indicator of whether the bot won or lost the game.
 
     """
-    pass
+    if not node:
+        return
+    node.visits += 1
+    node.wins += int(won)
+    backpropagate(node.parent, won)
 
 def ucb(node: MCTSNode, is_opponent: bool):
     """ Calcualtes the UCB value for the given node from the perspective of the bot
@@ -74,7 +115,14 @@ def ucb(node: MCTSNode, is_opponent: bool):
     Returns:
         The value of the UCB function for the given node
     """
-    pass
+    assert node, "Node is None in ucb"
+    assert node.vists > 0, "Node has not yet been visited in ucb"
+    assert node.parent, "Node does not have a parent in ucb"
+    win_rate = (node.wins / node.vists)
+    if is_opponent:
+        win_rate = 1 - win_rate
+    explore_value = explore_faction * sqrt(log(node.parent.vists) / node.vists)
+    return win_rate + explore_value
 
 def get_best_action(root_node: MCTSNode):
     """ Selects the best action from the root node in the MCTS tree
@@ -85,7 +133,8 @@ def get_best_action(root_node: MCTSNode):
         action: The best action from the root node
     
     """
-    pass
+    assert root_node.child_nodes, "Root node has no children"
+    return max(root_node.child_nodes.values(), key=lambda x: x.wins / max(x.visits, 1)).parent_action
 
 def is_win(board: Board, state, identity_of_bot: int):
     # checks if state is a win state for identity_of_bot
