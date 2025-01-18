@@ -1,2 +1,4 @@
 /Lecture 05_ P2 Introduction.pptx
 /P2_MCTS.docx
+*.pyc
+__pycache__/
