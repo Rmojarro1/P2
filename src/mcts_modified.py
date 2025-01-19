@@ -1,4 +1,3 @@
-
 from mcts_node import MCTSNode
 from p2_t3 import Board
 from random import choice
@@ -74,23 +73,47 @@ def expand_leaf(node: MCTSNode, board: Board, state):
     else:
         return node, state
 
-
-def rollout(board: Board, state):
-    """ Given the state of the game, the rollout plays out the remainder randomly.
+def rollout(board: Board, state, bot_identity: int):
+    """ Given the state of the game, the rollout plays out the remainder of the game with a winning and blocking move heuristic.
 
     Args:
         board:  The game setup.
         state:  The state of the game.
+        bot_identity: The identity of the bot (either 1 or 2)
     
     Returns:
         state: The terminal game state
-
     """
-    while board.points_values(state) is None:
-        action = choice(board.legal_actions(state))
+    while board.points_values(state) is None: 
+        # If there's a winning move, take it
+        winning_move = None
+        for action in board.legal_actions(state):
+            next_state = board.next_state(state, action)
+            if board.points_values(next_state) is not None: 
+                if is_win(board, next_state, bot_identity): 
+                    winning_move = action
+                    break
+        if winning_move:
+            action = winning_move
+        else:
+            # Otherwise, try to block the opponent's winning move
+            opponent_identity = 3 - bot_identity 
+            blocking_move = None
+            for action in board.legal_actions(state):
+                next_state = board.next_state(state, action)
+                if board.points_values(next_state) is not None: 
+                    if is_win(board, next_state, opponent_identity):  # Block the opponent's winning move
+                        blocking_move = action
+                        break
+            # If no winning or blocking move is found, take a random move
+            if blocking_move is None:
+                action = choice(board.legal_actions(state))
+            else:
+                action = blocking_move
+        
         state = board.next_state(state, action)
+    
     return state
-
 
 def backpropagate(node: MCTSNode|None, won: bool):
     """ Navigates the tree from a leaf node to the root, updating the win and visit count of each node along the path.
@@ -164,7 +187,7 @@ def think(board: Board, current_state):
         # ...
         node, state = traverse_nodes(node, board, state, bot_identity)
         node, state = expand_leaf(node, board, state)
-        terminal_state = rollout(board, state)
+        terminal_state = rollout(board, state, bot_identity)
         player_won = is_win(board, terminal_state, bot_identity)
         backpropagate(node, player_won)
 
