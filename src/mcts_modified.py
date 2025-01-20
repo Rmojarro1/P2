@@ -3,7 +3,7 @@ from p2_t3 import Board
 from random import choice
 from math import sqrt, log
 
-num_nodes = 100
+num_nodes = 1000
 explore_faction = 2.
 
 def traverse_nodes(node: MCTSNode, board: Board, state, bot_identity: int):
@@ -72,6 +72,33 @@ def expand_leaf(node: MCTSNode, board: Board, state):
         return child_node, next_state
     else:
         return node, state
+    
+def opponent_sub_box_win(board: Board, state, action, opponent_identity: int):
+    """ Checks if placing a move in the given action allows the opponent to win in a sub-box.
+
+    Args:
+        board:  The game setup.
+        state:  The state of the game after the move.
+        action: The action (move) that the bot is considering.
+        opponent_identity: The identity of the opponent (either 1 or 2)
+    
+    Returns:
+        bool: True if the opponent can win in the sub-box after the move, otherwise False.
+    """
+    # Find the sub-box where the action takes place
+    sub_box = action 
+    owned_boxes = board.owned_boxes(state)
+    sub_box_owner = owned_boxes.get(sub_box)
+    if sub_box_owner == opponent_identity: 
+        return False
+    # Check if the opponent can win in the sub-box after the bot’s move
+    for action in board.legal_actions(state):
+        next_state = board.next_state(state, action)
+        next_owned_boxes = board.owned_boxes(next_state)
+        # Check if this action will result in the opponent winning the box
+        if next_owned_boxes.get(sub_box) == opponent_identity:
+            return True
+    return False
 
 def rollout(board: Board, state, bot_identity: int):
     """ Given the state of the game, the rollout plays out the remainder of the game with a winning and blocking move heuristic.
@@ -84,36 +111,39 @@ def rollout(board: Board, state, bot_identity: int):
     Returns:
         state: The terminal game state
     """
+    opponent_identity = 3 - bot_identity 
+
     while board.points_values(state) is None: 
         # If there's a winning move, take it
         winning_move = None
+        blocking_move = None
+        avoid_move = None 
         for action in board.legal_actions(state):
             next_state = board.next_state(state, action)
             if board.points_values(next_state) is not None: 
                 if is_win(board, next_state, bot_identity): 
                     winning_move = action
                     break
+                # if opponent has winning move, block it
+                if is_win(board, next_state, opponent_identity):
+                    blocking_move = action
+                # Check if this move would allow the opponent to win in a box
+                if opponent_sub_box_win(board, next_state, action, opponent_identity):
+                    avoid_move = action
+        # Take the winning move if available, otherwise block opponent if possible
         if winning_move:
             action = winning_move
+        elif blocking_move:
+            action = blocking_move
+        elif avoid_move:
+            # If we can avoid giving the opponent a win, avoid that move
+            action = choice([a for a in board.legal_actions(state) if a != avoid_move])
         else:
-            # Otherwise, try to block the opponent's winning move
-            opponent_identity = 3 - bot_identity 
-            blocking_move = None
-            for action in board.legal_actions(state):
-                next_state = board.next_state(state, action)
-                if board.points_values(next_state) is not None: 
-                    if is_win(board, next_state, opponent_identity):  # Block the opponent's winning move
-                        blocking_move = action
-                        break
             # If no winning or blocking move is found, take a random move
-            if blocking_move is None:
-                action = choice(board.legal_actions(state))
-            else:
-                action = blocking_move
-        
+            action = choice(board.legal_actions(state))
         state = board.next_state(state, action)
-    
     return state
+
 
 def backpropagate(node: MCTSNode|None, won: bool):
     """ Navigates the tree from a leaf node to the root, updating the win and visit count of each node along the path.
