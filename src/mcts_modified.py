@@ -1,10 +1,13 @@
 from mcts_node import MCTSNode
 from p2_t3 import Board
 from random import choice
-from math import sqrt, log
+from math import sqrt, log, isclose
 
-num_nodes = 100 # 1000 default. 
+num_nodes = 1000 # 1000 default. 
 explore_faction = 2.
+
+win_value = 10; 
+free_choice_penalty = -5; 
 
 def traverse_nodes(node: MCTSNode, board: Board, state, bot_identity: int):
     """ Traverses the tree until the end criterion are met.
@@ -26,24 +29,24 @@ def traverse_nodes(node: MCTSNode, board: Board, state, bot_identity: int):
     while True:
         assert node, "Node is none in traverse_nodes"
 
-        #return node if untried actions exist
+        #if there are untried actions, return this node
         if node.untried_actions:
             return node, state
         
-        #return node if the game is over
+        #if the game is over, return this node
         if board.is_ended(state):
             return node, state
         
-        #otherwise, use UCB for the next node
+        #if neither, select next node based on UCB
         best_child, best_value = None, -float('inf')
         for action, child in node.child_nodes.items():
             is_opponent = (bot_identity != board.current_player(state))
             child_value = ucb(child, is_opponent)
-            if (child_value > best_value):
+            if child_value > best_value:
                 best_value = child_value
                 best_child = child
 
-        #update node and the state for the next loop
+        #update node and state for next loop
         node = best_child
         state = board.next_state(state, node.parent_action)
     
@@ -73,56 +76,37 @@ def expand_leaf(node: MCTSNode, board: Board, state):
     else:
         return node, state
 
-def rollout(board: Board, state, bot_identity: int):
+def rollout(board: Board, state):
     """
     Simulates the game to completion using a heuristic to prioritize winning and blocking moves.
 
     Args:
         board: The game setup.
         state: The current state of the game.
-        bot_identity: The identity of the bot (1 or 2).
 
     Returns:
         state: The terminal state of the game.
     """
-    opponent_identity = 3 - bot_identity
-    while not board.is_ended(state):  # Continue until the game ends
-        winning_move = None
-        blocking_move = None
-        subbox_winning_move = None
-        block_subbox = None 
+    while board.points_values(state) is None:
+        player = board.current_player(state)
+        best_action = choice(board.legal_actions(state))
+        best_value = float('INF') * 1 if player == 2 else -1
 
-        current_ownership = list(board.owned_boxes(state).values())
         for action in board.legal_actions(state):
+            R, C, r, c = action
             next_state = board.next_state(state, action)
-            next_ownership = list(board.owned_boxes(next_state).values()) 
-            # Check for a winning move
-            if board.points_values(next_state):
-                if is_win(board, next_state, bot_identity):
-                    winning_move = action
-                    break
-                if is_win(board, next_state, opponent_identity):
-                    blocking_move = action
-                    break
-                # Check for sub-box win (logic probably the issue)
-                if sum(next_ownership) - sum(current_ownership) == bot_identity:
-                    subbox_winning_move = action
-                if sum(next_ownership) - sum(current_ownership) == opponent_identity:
-                    block_subbox = action
-
-        # Prioritize moves
-        if winning_move:
-            action = winning_move
-        elif blocking_move:
-            action = blocking_move
-        elif subbox_winning_move:
-            action = subbox_winning_move
-        elif block_subbox:
-            action = block_subbox
-        else:
-            action = choice(board.legal_actions(state))
-        state = board.next_state(state, action)
-    return state
+            action_score = evaluate_tile(board, next_state, R, C)
+            next_tile_score = evaluate_tile(board, next_state, r, c)
+            if isclose(abs(next_tile_score), win_value):
+                action_score += free_choice_penalty * 1 if player == 1 else -1
+            else:
+                if next_tile_score < 0 and player == 1 or next_tile_score > 0 and player == 2:
+                    action_score += next_tile_score * 0.5
+            if player == 1 and action_score > best_value or player == 2 and action_score < best_value:
+                best_action = action
+                best_value = action_score
+        state = board.next_state(state, best_action)
+    return state 
 
 def backpropagate(node: MCTSNode|None, won: bool):
     """ Navigates the tree from a leaf node to the root, updating the win and visit count of each node along the path.
@@ -196,7 +180,7 @@ def think(board: Board, current_state):
         # ...
         node, state = traverse_nodes(node, board, state, bot_identity)
         node, state = expand_leaf(node, board, state)
-        terminal_state = rollout(board, state, bot_identity)
+        terminal_state = rollout(board, state)
         player_won = is_win(board, terminal_state, bot_identity)
         backpropagate(node, player_won)
 
@@ -206,3 +190,75 @@ def think(board: Board, current_state):
     print(f"Action chosen: {best_action}")
     # print(f"Action chosen: {best_action}")
     return best_action
+
+
+def evaluate_tile(board : Board, state, row, column):
+    """
+    Returns:    The evaluation for  the board: positive for p1 and negative for p2.
+    """
+    # Constants
+    row_mask = lambda row: 0b111 << row
+    col_mask = lambda col: 0b001001001 << col
+    lr_diag_mask = 0b100010001
+    rl_diag_mask = 0b001010100
+    score = 0
+    p1 = state[3 * row + column]
+    p2 = state[3 * row + column + 1]
+    all = p1 | p2
+    # Check for wins/winnability in rows and cols
+    # If player wins then return immediately
+    for row in range(3):
+        p1_row = row_mask(row) & p1
+        p2_row = row_mask(row) & p2
+        row_score = 0
+        # Check for win
+        if not (p1_row ^ row_mask(row) and p2_row ^ row_mask(row)):
+            return win_value * (1 if p1_row else -1)
+        # Score in favor of player that can score off of this row
+        row_score = count_bits(p1_row) - count_bits(p2_row)
+        # Check for ties
+        row_score *= (p1_row == 0 or p2_row == 0) and (p1_row | p2_row) != 0
+        score += row_score
+    for col in range(3):
+        p1_col = col_mask(col) & p1
+        p2_col = col_mask(col) & p2
+        col_score = 0
+        # Check for win
+        if not (p1_col ^ col_mask(col) and p2_col ^ col_mask(col)):
+            return win_value * (1 if p1_col else -1)
+        # Score in favor of player that can score off of this col
+        col_score = count_bits(p1_col) - count_bits(p2_col)
+        # Check for ties
+        col_score *= (p1_col == 0 or p2_col == 0) and (p1_col | p2_col) != 0
+        score += col_score
+    
+    # Check for diagonal wins
+    lr_diag = lr_diag_mask & all
+    rl_diag = rl_diag_mask & all
+    diag_score = 0
+    # Check for win in left-to-right diagonal
+    if not ((lr_diag & p1) ^ lr_diag_mask and (lr_diag & p2) ^ lr_diag_mask):
+        return win_value * (1 if lr_diag & p1 else -1)
+    # Score in favor of player that can score off of this diagonal
+    diag_score = count_bits(lr_diag & p1) - count_bits(lr_diag & p2)
+    # Check for ties
+    diag_score *= bool(lr_diag & p1) ^ bool(lr_diag & p2)
+    score += diag_score
+    # Check for win in right-to-left diagonal
+    if not ((rl_diag & p1) ^ rl_diag_mask and (rl_diag & p1) ^ rl_diag_mask):
+        return win_value * (1 if rl_diag & p1 else -1)
+    # Score in favor of player that can score off of this diagonal
+    diag_score = count_bits(rl_diag & p1) - count_bits(rl_diag & p2)
+    # Check for ties
+    diag_score *= bool(rl_diag & p1) ^ bool(rl_diag & p2)
+    score += diag_score
+    
+    return score
+
+
+def count_bits(mask):
+    bits = 0
+    while(mask):
+        bits += mask & 1
+        mask >>= 1
+    return bits
