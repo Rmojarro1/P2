@@ -90,9 +90,12 @@ def rollout(board: Board, state, bot_identity: int):
         winning_move = None
         blocking_move = None
         subbox_winning_move = None
+        block_subbox = None 
 
+        current_ownership = list(board.owned_boxes(state).values())
         for action in board.legal_actions(state):
             next_state = board.next_state(state, action)
+            next_ownership = list(board.owned_boxes(next_state).values()) 
             # Check for a winning move
             if board.points_values(next_state):
                 if is_win(board, next_state, bot_identity):
@@ -101,12 +104,7 @@ def rollout(board: Board, state, bot_identity: int):
                 if is_win(board, next_state, opponent_identity):
                     blocking_move = action
                     break
-
             # Check for sub-box win
-            current_ownership = list(board.owned_boxes(state).values())
-            next_ownership = list(board.owned_boxes(next_state).values()) 
-            subbox_winning_move = None
-            block_subbox = None 
             if sum(next_ownership) - sum(current_ownership) == bot_identity:
                 subbox_winning_move = action
                 break
