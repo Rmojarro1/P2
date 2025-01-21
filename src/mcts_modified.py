@@ -3,7 +3,7 @@ from p2_t3 import Board
 from random import choice
 from math import sqrt, log
 
-num_nodes = 100
+num_nodes = 100 # 1000 default. 
 explore_faction = 2.
 
 def traverse_nodes(node: MCTSNode, board: Board, state, bot_identity: int):
@@ -104,13 +104,11 @@ def rollout(board: Board, state, bot_identity: int):
                 if is_win(board, next_state, opponent_identity):
                     blocking_move = action
                     break
-            # Check for sub-box win
-            if sum(next_ownership) - sum(current_ownership) == bot_identity:
-                subbox_winning_move = action
-                break
-            elif sum(next_ownership) - sum(current_ownership) == opponent_identity:
-                block_subbox = action
-                break
+                # Check for sub-box win (logic probably the issue)
+                if sum(next_ownership) - sum(current_ownership) == bot_identity:
+                    subbox_winning_move = action
+                if sum(next_ownership) - sum(current_ownership) == opponent_identity:
+                    block_subbox = action
 
         # Prioritize moves
         if winning_move:
