@@ -36,17 +36,18 @@ def traverse_nodes(node: MCTSNode, board: Board, state, bot_identity: int):
             return node, state
         
         #otherwise, use UCB for the next node
-        best_child, best_value = None, -float('inf')
+        best_child, best_value, best_action = None, -float('inf'), None
         for action, child in node.child_nodes.items():
             is_opponent = (bot_identity != board.current_player(state))
             child_value = ucb(child, is_opponent)
             if (child_value > best_value):
                 best_value = child_value
                 best_child = child
+                best_action = action
 
         #update node and the state for the next loop
         node = best_child
-        state = board.next_state(state, node.parent_action)
+        state = board.next_state(state, best_action)
     
 
 def expand_leaf(node: MCTSNode, board: Board, state):
@@ -115,9 +116,9 @@ def ucb(node: MCTSNode, is_opponent: bool):
     Returns:
         The value of the UCB function for the given node
     """
-    assert node, "Node is None in ucb"
+    if node.parent is None: # handle root node
+        return node.wins / max(node.visits, 1)
     assert node.visits > 0, "Node has not yet been visited in ucb"
-    assert node.parent, "Node does not have a parent in ucb"
     win_rate = (node.wins / node.visits)
     if is_opponent:
         win_rate = 1 - win_rate
@@ -140,7 +141,12 @@ def is_win(board: Board, state, identity_of_bot: int):
     # checks if state is a win state for identity_of_bot
     outcome = board.points_values(state)
     assert outcome is not None, "is_win was called on a non-terminal state"
-    return outcome[identity_of_bot] == 1
+    if outcome[identity_of_bot] == 1:
+        return 1
+    elif all(v == 0 for v in outcome.values()): #check for tie
+        return 0
+    else:
+        return 0
 
 def think(board: Board, current_state):
     """ Performs MCTS by sampling games and calling the appropriate functions to construct the game tree.

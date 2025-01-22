@@ -38,17 +38,18 @@ def traverse_nodes(node: MCTSNode, board: Board, state, bot_identity: int):
             return node, state
         
         #if neither, select next node based on UCB
-        best_child, best_value = None, -float('inf')
+        best_child, best_value, best_action = None, -float('inf'), None
         for action, child in node.child_nodes.items():
             is_opponent = (bot_identity != board.current_player(state))
             child_value = ucb(child, is_opponent)
-            if child_value > best_value:
+            if (child_value > best_value):
                 best_value = child_value
                 best_child = child
+                best_action = action
 
-        #update node and state for next loop
+        #update node and the state for the next loop
         node = best_child
-        state = board.next_state(state, node.parent_action)
+        state = board.next_state(state, best_action)
     
 
 def expand_leaf(node: MCTSNode, board: Board, state):
@@ -100,8 +101,8 @@ def rollout(board: Board, state):
             if isclose(abs(next_tile_score), win_value):
                 action_score += free_choice_penalty * 1 if player == 1 else -1
             else:
-                if next_tile_score < 0 and player == 1 or next_tile_score > 0 and player == 2:
-                    action_score += next_tile_score * 0.5
+                #if next_tile_score < 0 and player == 1 or next_tile_score > 0 and player == 2:
+                action_score += next_tile_score * 0.5
             if player == 1 and action_score > best_value or player == 2 and action_score < best_value:
                 best_action = action
                 best_value = action_score
@@ -156,7 +157,12 @@ def is_win(board: Board, state, identity_of_bot: int):
     # checks if state is a win state for identity_of_bot
     outcome = board.points_values(state)
     assert outcome is not None, "is_win was called on a non-terminal state"
-    return outcome[identity_of_bot] == 1
+    if outcome[identity_of_bot] == 1:
+        return 1
+    elif all(v == 0 for v in outcome.values()): #check for tie
+        return 0
+    else:
+        return 0
 
 def think(board: Board, current_state):
     """ Performs MCTS by sampling games and calling the appropriate functions to construct the game tree.
